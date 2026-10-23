@@ -96,8 +96,9 @@ Once the caches are filled, steps 2 and 3 re-run without calling any API (use
 
 Live: https://walkersimpson1.github.io/Hackathon/
 
-`web/` is the public site: the portfolio, each pick's score breakdown, listed comparable and
-sentiment, and the full ranking. It is rebuilt from `outputs/` and redeployed automatically on
+`web/` is the public site: client filters (capital, cash, position limits, sectors, stages)
+that re-run the allocation live, each pick's score breakdown, listed comparable and sentiment,
+the full ranking, and a methodology page. It is rebuilt from `outputs/` and redeployed automatically on
 every push to `main` (see `web/README.md`). To refresh it locally after re-running the pipeline:
 
 ```

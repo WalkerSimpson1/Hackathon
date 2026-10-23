@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="description" content="VentureLens builds an explainable $100,000 growth portfolio from Y Combinator startups, with public comparables and news sentiment for every pick.">
+<meta name="description" content="VentureLens builds an explainable growth portfolio from Y Combinator startups for a client's mandate, with public comparables and news sentiment for every pick.">
 <meta name="theme-color" content="#f7f7f5" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#121413" media="(prefers-color-scheme: dark)">
 <title>VentureLens</title>
@@ -13,11 +13,12 @@
 <body>
 <header class="top">
   <div class="wrap top-inner">
-    <a class="brand" href="#">VentureLens</a>
+    <a class="brand" href="./">VentureLens</a>
     <nav aria-label="Sections">
+      <a href="#client">Client</a>
       <a href="#portfolio">Portfolio</a>
       <a href="#ranking">Ranking</a>
-      <a href="#method">Method</a>
+      <a href="methodology.html">Methodology</a>
     </nav>
   </div>
 </header>
@@ -25,15 +26,44 @@
 <main id="main" class="wrap">
   <section class="intro">
     <h1>A growth portfolio built from Y&nbsp;Combinator startups, with a reason for every dollar.</h1>
-    <p class="lede">A rule-based model scores each startup and splits the capital across the top ten, keeping a cash reserve. Each pick is matched to a listed company with real financials and checked against news and community sentiment.</p>
-    <div class="capital">
-      <label for="capital">Capital</label>
-      <div class="capital-field">
-        <span aria-hidden="true">$</span>
-        <input id="capital" inputmode="numeric" autocomplete="off" value="100,000">
-      </div>
-      <p class="hint">Weights stay fixed; amounts rescale.</p>
+    <p class="lede">Set the client's mandate and VentureLens picks and sizes the startups that fit it. Each pick is scored by a transparent rule-based model, matched to a listed company with real financials, and checked against news and community sentiment.</p>
+  </section>
+
+  <section id="client" aria-labelledby="client-title">
+    <div class="section-head">
+      <h2 id="client-title">Client</h2>
+      <button class="link-btn" id="reset" type="button">Reset to default</button>
     </div>
+    <div class="client">
+      <div class="field">
+        <label for="capital">Capital</label>
+        <div class="capital-field">
+          <span aria-hidden="true">$</span>
+          <input id="capital" inputmode="numeric" autocomplete="off" value="100,000">
+        </div>
+      </div>
+      <div class="field">
+        <label for="cash">Cash reserve <output id="cash-out" for="cash"></output></label>
+        <input id="cash" type="range" min="0" max="40" step="1">
+      </div>
+      <div class="field">
+        <label for="positions-n">Positions <output id="positions-out" for="positions-n"></output></label>
+        <input id="positions-n" type="range" min="3" max="20" step="1">
+      </div>
+      <div class="field">
+        <label for="max">Max per position <output id="max-out" for="max"></output></label>
+        <input id="max" type="range" min="5" max="50" step="1">
+      </div>
+      <div class="field wide">
+        <span class="label">Sectors</span>
+        <div class="chips" id="sectors" role="group" aria-label="Sectors"></div>
+      </div>
+      <div class="field wide">
+        <span class="label">Stages</span>
+        <div class="chips" id="stages" role="group" aria-label="Stages"></div>
+      </div>
+    </div>
+    <p class="muted small status" id="mandate-status"></p>
   </section>
 
   <section id="portfolio" aria-labelledby="portfolio-title">
@@ -42,7 +72,7 @@
       <p class="muted" id="portfolio-sub"></p>
     </div>
     <div class="alloc" id="alloc" role="img" aria-label="Allocation by position"></div>
-    <div class="positions" id="positions"><p class="muted">Loading the latest pipeline output…</p></div>
+    <div class="positions" id="positions"><p class="muted" style="padding:18px">Loading the latest pipeline output…</p></div>
   </section>
 
   <section id="ranking" aria-labelledby="ranking-title">
@@ -56,48 +86,27 @@
   </section>
 
   <section id="method" aria-labelledby="method-title">
-    <div class="section-head"><h2 id="method-title">Method</h2></div>
+    <div class="section-head">
+      <h2 id="method-title">How it works</h2>
+      <a href="methodology.html">Full methodology →</a>
+    </div>
     <div class="method">
       <div>
         <h3>Score</h3>
-        <p>The dataset has no revenue or valuation figures, so each factor uses the closest observable proxy. Each factor is scaled to 0–1.</p>
         <ul class="weights" id="weights"></ul>
       </div>
       <div>
         <h3>Allocation</h3>
-        <ul class="plain">
-          <li>Only operating companies are eligible; the ten highest scores are picked.</li>
-          <li>10% of capital is held in cash.</li>
-          <li>Weights tilt toward better-funded, more widely backed companies (log-scaled), then are capped between 4% and 25%.</li>
-          <li>Code does the maths; the LLM only explains and matches comparables.</li>
-        </ul>
-      </div>
-      <div>
-        <h3>Pipeline</h3>
-        <ol class="plain">
-          <li><code>score_startups.py</code> scores and allocates</li>
-          <li><code>match_comparables.py</code> picks 3 listed peers (LLM)</li>
-          <li><code>fetch_finnhub.py</code> pulls their financials</li>
-          <li><code>analyze_sentiment.py</code> reads news and Hacker&nbsp;News</li>
-          <li><code>web/build_data.py</code> builds this page's data</li>
-        </ol>
-      </div>
-      <div>
-        <h3>Sources</h3>
-        <ul class="plain">
-          <li>Startups and founders: Y Combinator dataset, 2005–2014 cohorts</li>
-          <li>Public comparables: Finnhub and SEC filings</li>
-          <li>Sentiment: Google News, Hacker News, LLM summary</li>
-          <li id="asof"></li>
-        </ul>
+        <ul class="plain" id="alloc-rules"></ul>
       </div>
     </div>
+    <p class="muted small" id="asof" style="margin-top:20px"></p>
   </section>
 </main>
 
 <footer class="wrap foot">
   <p>Educational screening tool, not financial advice. Startups can't be bought directly; listed comparables are context, not substitutes.</p>
-  <p><a href="https://github.com/WalkerSimpson1/Hackathon">Source on GitHub</a></p>
+  <p><a href="methodology.html">Methodology</a> · <a href="https://github.com/WalkerSimpson1/Hackathon">Source on GitHub</a></p>
 </footer>
 
 <script type="module" src="app.js"></script>

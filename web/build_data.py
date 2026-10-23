@@ -10,12 +10,18 @@ Reads the pipeline outputs listed in paths.py and keeps only the fields the site
     venturelens_matches.csv                     ->  the 3 LLM-matched public comparables
     venturelens_comparable_data.json            ->  Finnhub metrics and revenue history
 
+The page re-runs the allocation in the browser so a client can change capital, cash,
+position limits, sectors and stages. It needs the allocation inputs for every scored
+startup, and the model's limits are read straight from pipeline/score_startups.py so the
+two never drift. With the default mandate the page reproduces the pipeline's portfolio.
+
 The full comparable JSON is ~2 MB; site.json is a small fraction of that, so the page
 loads fast. Re-run this script whenever outputs/ changes; the GitHub Pages workflow
 also runs it on every push to main.
 """
 from __future__ import annotations
 
+import ast
 import csv
 import json
 import math
@@ -27,6 +33,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  # repo root, fo
 import paths  # noqa: E402
 
 OUT_JSON = Path(__file__).resolve().parent / "data" / "site.json"
+SCORE_SCRIPT = paths.ROOT / "pipeline" / "score_startups.py"
+MODEL_CONSTANTS = ("CAPITAL_USD", "CASH_WEIGHT", "MAX_POSITION", "MIN_POSITION")
+POSITIONS = 10  # allocate() keeps .head(10)
 
 # Mirrors the constants in pipeline/score_startups.py so the page explains the real model.
 SCORE_WEIGHTS = {
@@ -36,6 +45,21 @@ SCORE_WEIGHTS = {
     "Tech_Score": 0.10,
     "Stage_Score": 0.10,
 }
+
+
+def model_constants() -> dict:
+    """Read the allocation limits from score_startups.py without importing pandas."""
+    tree = ast.parse(SCORE_SCRIPT.read_text(encoding="utf-8"))
+    found = {}
+    for node in tree.body:
+        if isinstance(node, ast.Assign) and len(node.targets) == 1:
+            name = getattr(node.targets[0], "id", None)
+            if name in MODEL_CONSTANTS:
+                found[name] = ast.literal_eval(node.value)
+    missing = set(MODEL_CONSTANTS) - set(found)
+    if missing:
+        raise SystemExit(f"{SCORE_SCRIPT.name} no longer defines {sorted(missing)}")
+    return found
 
 
 def read_csv(path: Path) -> list[dict]:
@@ -76,12 +100,12 @@ def startup_fields(r: dict) -> dict:
         "ycSession": text(r.get("Y Combinator Session")),
         "founders": text(r.get("Founders")),
         "website": text(r.get("Website")),
-        "raisedM": num(r.get("Total_Raised_USD_Millions")),
+        "raisedM": num(r.get("Total_Raised_USD_Millions"), 12),
         "investors": year(r.get("Investor_Count")),
         "tier1": year(r.get("Tier1_Investor_Count")),
         "fairValueM": num(r.get("Fair_Value_USD_Millions")),
         "upside": num(r.get("Upside_to_Fair_Value")),
-        "score": num(r.get("Risk_Adjusted_Score")),
+        "score": num(r.get("Risk_Adjusted_Score"), 12),  # full precision: weights depend on it
         "parts": {k.replace("_Score", "").lower(): num(r.get(k)) for k in SCORE_WEIGHTS},
     }
 
@@ -156,56 +180,49 @@ def main() -> None:
     matches = read_csv(paths.MATCHES_CSV)
     with open(paths.COMPARABLE_DATA_JSON, encoding="utf-8") as f:
         comparables = {r["Company_ID"]: r for r in json.load(f)}
+    model = model_constants()
 
-    picks, cash = [], None
-    for r in portfolio:
-        if r["Company_ID"] == "CASH":
-            cash = {"weight": num(r["Weight"]), "usd": year(r["Allocation_USD"])}
-            continue
-        picks.append({
+    # Sentiment and comparables only exist for companies the pipeline analysed.
+    analysed = {r["Company_ID"]: r for r in portfolio if r["Company_ID"] != "CASH"}
+    cash_row = next((r for r in portfolio if r["Company_ID"] == "CASH"), None)
+
+    companies = []
+    for r in scored:
+        name = r["Company_ID"]
+        a = analysed.get(name)
+        cmp_matches = [m for m in matches if m["Company_ID"] == name]
+        companies.append({
             **startup_fields(r),
-            "weight": num(r["Weight"], 12),  # full precision so rescaled dollars match the pipeline
-            "usd": year(r["Allocation_USD"]),
-            "sentiment": sentiment_fields(r),
-            "comparable": comparable_fields(
-                comparables.get(r["Company_ID"]),
-                [m for m in matches if m["Company_ID"] == r["Company_ID"]],
-            ),
+            "sentiment": sentiment_fields(a) if a else None,
+            "comparable": comparable_fields(comparables.get(name), cmp_matches)
+            if (name in comparables or cmp_matches) else None,
         })
+    companies.sort(key=lambda c: -(c["score"] or 0))
 
-    in_portfolio = {p["name"] for p in picks}
-    ranking = sorted(
-        ({
-            "name": r["Company_ID"],
-            "domain": text(r.get("Domain")),
-            "stage": text(r.get("Funding_Stage")),
-            "status": text(r.get("Status")),
-            "ycYear": year(r.get("Y Combinator Year")),
-            "score": num(r.get("Risk_Adjusted_Score")),
-            "picked": r["Company_ID"] in in_portfolio,
-        } for r in scored),
-        key=lambda r: -(r["score"] or 0),
-    )
-
-    capital = sum(p["usd"] for p in picks) + (cash["usd"] if cash else 0)
     fetched = [c.get("fetched_at") for c in comparables.values() if c.get("fetched_at")]
     site = {
         "generatedAt": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "marketDataAsOf": max(fetched)[:10] if fetched else None,
-        "capital": capital,
-        "cash": cash,
-        "scoreWeights": {k.replace("_Score", "").lower(): v for k, v in SCORE_WEIGHTS.items()},
-        "portfolio": sorted(picks, key=lambda p: -p["weight"]),
-        "ranking": ranking,
-        "counts": {
-            "scored": len(scored),
-            "operating": sum(r["status"] == "Operating" for r in ranking),
+        "model": {
+            "capital": model["CAPITAL_USD"],
+            "cashWeight": model["CASH_WEIGHT"],
+            "maxPosition": model["MAX_POSITION"],
+            "minPosition": model["MIN_POSITION"],
+            "positions": POSITIONS,
         },
+        # The pipeline's own result, so the page can show whether a mandate matches it.
+        "pipeline": {
+            "dollars": {r["Company_ID"]: year(r["Allocation_USD"]) for r in portfolio},
+            "cashUsd": year(cash_row["Allocation_USD"]) if cash_row else None,
+        },
+        "scoreWeights": {k.replace("_Score", "").lower(): v for k, v in SCORE_WEIGHTS.items()},
+        "companies": companies,
     }
     OUT_JSON.parent.mkdir(parents=True, exist_ok=True)
     OUT_JSON.write_text(json.dumps(site, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
     print(f"Wrote {OUT_JSON.relative_to(paths.ROOT)} "
-          f"({OUT_JSON.stat().st_size / 1024:.0f} KB, {len(picks)} positions, {len(ranking)} ranked)")
+          f"({OUT_JSON.stat().st_size / 1024:.0f} KB, {len(companies)} companies, "
+          f"{len(analysed)} with comparables and sentiment)")
 
 
 if __name__ == "__main__":

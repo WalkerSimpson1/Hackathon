@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="How VentureLens scores Y Combinator startups, allocates capital, matches public comparables and reads sentiment.">
+<meta name="theme-color" content="#f7f7f5" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#121413" media="(prefers-color-scheme: dark)">
+<title>Methodology · VentureLens</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231f5f4a'/%3E%3Cpath d='M9 9l7 15 7-15' fill='none' stroke='white' stroke-width='3.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="top">
+  <div class="wrap top-inner">
+    <a class="brand" href="./">VentureLens</a>
+    <nav aria-label="Sections">
+      <a href="./#client">Client</a>
+      <a href="./#portfolio">Portfolio</a>
+      <a href="./#ranking">Ranking</a>
+      <a href="methodology.html" aria-current="page">Methodology</a>
+    </nav>
+  </div>
+</header>
+
+<main id="main" class="wrap">
+  <article class="doc">
+    <h1>Methodology</h1>
+    <p class="lede">VentureLens turns a public dataset of Y Combinator startups into a sized, explainable portfolio. Code does every calculation; an LLM only explains, matches comparables and summarises sentiment. It never sets a score or a weight.</p>
+    <nav class="toc" aria-label="On this page">
+      <a href="#client">Client</a><a href="#data">Data</a><a href="#score">Score</a><a href="#valuation">Valuation</a>
+      <a href="#allocation">Allocation</a><a href="#comparables">Comparables</a><a href="#sentiment">Sentiment</a><a href="#limits">Limitations</a>
+    </nav>
+
+    <h2 id="client">1. The client</h2>
+    <p>A growth investor with <b data-m="capital">$100,000</b>, a long horizon and high risk tolerance, who wants to know which startups to back, how much to put in each, and why. The default mandate keeps <b data-m="cashWeight">10%</b> in cash, holds <b data-m="positions">10</b> positions, and limits each position to between <b data-m="minPosition">4%</b> and <b data-m="maxPosition">25%</b>.</p>
+    <p>On the main page the client can change the capital, cash reserve, number of positions, position cap, sectors and stages. The page re-runs the same allocation maths in the browser. With the default settings it reproduces the pipeline's portfolio to the dollar. Changed settings are kept in the page link, so a mandate can be shared.</p>
+
+    <h2 id="data">2. Data</h2>
+    <table>
+      <thead><tr><th>Data</th><th>Source</th><th>Used for</th></tr></thead>
+      <tbody>
+        <tr><td>Startups and founders</td><td>Y Combinator dataset, 2005–2014 cohorts (<code>data/raw/</code>)</td><td>Scoring and allocation</td></tr>
+        <tr><td>Listed comparables</td><td>LLM match, then Finnhub profiles, metrics and SEC-reported financials</td><td>Market context for each pick</td></tr>
+        <tr><td>News and community</td><td>Google News RSS and Hacker News, summarised by an LLM</td><td>Sentiment, risks and catalysts</td></tr>
+      </tbody>
+    </table>
+    <p>Companies with no disclosed funding or no outside backers can't be priced, so they are dropped. <span data-m="scored">215</span> startups remain and are scored; <span data-m="operating">169</span> of them are still operating and eligible.</p>
+
+    <h2 id="score">3. Score</h2>
+    <p>The dataset has no revenue, valuation or runway figures, so each factor uses the closest observable proxy. Each factor is scaled to 0–1 and combined with fixed weights:</p>
+    <div class="formula" id="formula">Score = 0.35 × Valuation + 0.25 × Survival + 0.20 × Backing
+      + 0.10 × Sector + 0.10 × Stage</div>
+    <table>
+      <thead><tr><th>Factor</th><th class="num">Weight</th><th>Proxy</th></tr></thead>
+      <tbody>
+        <tr><td>Valuation</td><td class="num" data-w="valuation">35%</td><td>Upside to peer-implied fair value (see below), min–max scaled between the 5th and 95th percentiles</td></tr>
+        <tr><td>Survival</td><td class="num" data-w="survival">25%</td><td>Years since the YC batch, capped at 5</td></tr>
+        <tr><td>Backing</td><td class="num" data-w="backing">20%</td><td>70% tier-1 investors (capped at 3), 30% founding-team size (capped at 3)</td></tr>
+        <tr><td>Sector</td><td class="num" data-w="tech">10%</td><td>Growth profile of the sector: AI &amp; Data 1.00; Enterprise SaaS and FinTech 0.83; Health &amp; Education and Hardware 0.67; Commerce and Other 0.50; Consumer &amp; Social 0.33</td></tr>
+        <tr><td>Stage</td><td class="num" data-w="stage">10%</td><td>Earlier is better for growth: Seed 1.00, Series A 0.83, Series B 0.67, Series C+ 0.50, Pre-IPO 0.25. Stage comes from total disclosed funding.</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="valuation">4. Valuation proxy</h2>
+    <p>With no revenue to price against, the model uses dollars raised per outside backer as a multiple. It estimates what a company "should" have raised from what similar companies raised per backer:</p>
+    <div class="formula">Observed multiple = total raised ÷ outside backers
+Peer multiple     = median multiple of companies in the same sector and stage
+                    (falls back to sector, then stage, then all companies
+                     when a peer group has fewer than 10 members)
+Fair value        = outside backers × peer multiple
+Upside            = fair value ÷ total raised − 1</div>
+    <p>Medians are taken after clipping the top and bottom 1%, so a few extreme rounds can't dominate.</p>
+
+    <h2 id="allocation">5. Allocation</h2>
+    <ol>
+      <li>Keep operating companies that fit the mandate's sectors and stages, and take the top <span data-m="positions">10</span> by score.</li>
+      <li>Tilt towards larger, better-funded companies, which are more de-risked. Log scaling stops a $500M company from getting 1,000× the weight of a $500k one:
+        <div class="formula">Funding factor = ln(1 + raised in $k) ÷ average across picks
+Size factor    = ln(1 + backers) ÷ average across picks
+Allocation     = score × √(funding factor × size factor)</div></li>
+      <li>Scale the weights to fill the invested share (100% minus cash). Then "water-fill": pin any position outside the <span data-m="minPosition">4%</span>–<span data-m="maxPosition">25%</span> band at the limit and spread the difference over the others, repeating until everything fits.</li>
+      <li>Convert to whole dollars. Any rounding remainder goes to the top-scored pick.</li>
+    </ol>
+    <p>If the cap is too low to invest everything (for example 5 positions capped at 10%), the rest stays in cash and the page says so.</p>
+
+    <h2 id="comparables">6. Public comparables</h2>
+    <p>Startups can't be bought on an exchange, so each pick is matched to listed companies that do similar work. This gives market context; they are not substitutes.</p>
+    <ul>
+      <li><b>Match:</b> an LLM proposes three ranked listed companies, with the rationale, similarities, differences and a confidence score. It prefers established US listings that file with the SEC when matches are equally good. Responses are cached so runs are reproducible.</li>
+      <li><b>Fetch:</b> the highest-ranked match that has a Finnhub profile and enough annual financials is used. The page shows its market cap, revenue growth, gross margin, 52-week return and annual revenue from SEC filings.</li>
+    </ul>
+
+    <h2 id="sentiment">7. Sentiment</h2>
+    <p>For each pick, recent Google News headlines and Hacker News discussions about the company and its founders are collected, and an LLM scores them from −1 to 1:</p>
+    <div class="formula">Overall = 0.6 × company sentiment + 0.4 × founder sentiment
+          (company only when there is no founder coverage)</div>
+    <p>The result is labelled from Very Bearish to Very Bullish, with a written summary, key risks and growth catalysts. If the LLM is unavailable, a local lexicon model (VADER) is used instead. Sentiment is shown as context only; it does not change the weights.</p>
+
+    <h2 id="limits">8. Limitations</h2>
+    <ul>
+      <li>The startup data covers 2005–2014 YC cohorts; many companies have since changed, been acquired or closed.</li>
+      <li>Every factor is a proxy. Funding per backer is not revenue, and survival is not runway.</li>
+      <li>Comparables and sentiment are only produced for the pipeline's own portfolio. A custom mandate may pick companies that have no comparable or sentiment yet.</li>
+      <li>LLM matches and summaries can be wrong; confidence scores and sources are shown so they can be checked.</li>
+    </ul>
+    <p class="muted small" id="asof" style="margin-top:24px"></p>
+    <p style="margin-top:20px"><a href="./">← Back to the portfolio</a></p>
+  </article>
+</main>
+
+<footer class="wrap foot">
+  <p>Educational screening tool, not financial advice.</p>
+  <p><a href="https://github.com/WalkerSimpson1/Hackathon">Source on GitHub</a></p>
+</footer>
+
+<script type="module">
+  // Fill the model's current settings from site.json so this page tracks the pipeline.
+  try {
+    const d = await (await fetch('data/site.json', { cache: 'no-cache' })).json();
+    const pct = (v) => `${Math.round(v * 100)}%`;
+    const values = {
+      capital: '$' + d.model.capital.toLocaleString('en-US'),
+      cashWeight: pct(d.model.cashWeight),
+      positions: d.model.positions,
+      minPosition: pct(d.model.minPosition),
+      maxPosition: pct(d.model.maxPosition),
+      scored: d.companies.length,
+      operating: d.companies.filter((c) => c.status === 'Operating').length,
+    };
+    document.querySelectorAll('[data-m]').forEach((el) => { el.textContent = values[el.dataset.m]; });
+    document.querySelectorAll('[data-w]').forEach((el) => { el.textContent = pct(d.scoreWeights[el.dataset.w]); });
+    const w = d.scoreWeights;
+    document.querySelector('#formula').textContent =
+      `Score = ${w.valuation.toFixed(2)} × Valuation + ${w.survival.toFixed(2)} × Survival + ${w.backing.toFixed(2)} × Backing\n      + ${w.tech.toFixed(2)} × Sector + ${w.stage.toFixed(2)} × Stage`;
+    document.querySelector('#asof').textContent =
+      `Market data as of ${d.marketDataAsOf ?? 'n/a'}; page data built ${d.generatedAt.slice(0, 10)}.`;
+  } catch { /* the static text above already shows the defaults */ }
+</script>
+</body>
+</html>
