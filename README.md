@@ -46,6 +46,7 @@ data/archive/        old Kaggle data, no longer used; kept for reference
 outputs/             every generated file (test_runs/ holds small trial runs)
 docs/                hackathon plan and Finnhub API notes
 tests/fixtures/      sample inputs for quick runs
+web/                 the public web app, built from outputs/ (see web/README.md)
 cache/               API response caches (git-ignored; created on first run)
 ```
 
@@ -91,11 +92,22 @@ Quick trial without the full portfolio:
 Once the caches are filled, steps 2 and 3 re-run without calling any API (use
 `--offline` for Finnhub).
 
+## Web app
+
+Live: https://walkersimpson1.github.io/Hackathon/
+
+`web/` is the public site: the portfolio, each pick's score breakdown, listed comparable and
+sentiment, and the full ranking. It is rebuilt from `outputs/` and redeployed automatically on
+every push to `main` (see `web/README.md`). To refresh it locally after re-running the pipeline:
+
+```
+py web/build_data.py
+py -m http.server 8000 --directory web
+```
+
 ## Dashboard
 
-Dashboard: coming soon, will be `app.py` at the repo root (`streamlit run app.py`).
-
-Until then, preview every chart for each startup:
+Preview every chart for each startup:
 
 ```
 streamlit run charts_preview.py

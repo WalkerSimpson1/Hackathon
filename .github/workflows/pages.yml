@@ -1,0 +1,40 @@
+# Publishes the VentureLens web app (web/) to GitHub Pages.
+# Runs on every push to main that touches the pipeline outputs or the site, rebuilds
+# web/data/site.json from outputs/ so the page always matches the pipeline, then deploys.
+# One-time setup by a repo admin: Settings -> Pages -> Source: "GitHub Actions".
+name: Deploy web app
+
+on:
+  push:
+    branches: [main]
+    paths: ["outputs/**", "web/**", "paths.py", ".github/workflows/pages.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build site data from outputs/
+        run: python web/build_data.py
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: web
+      - id: deployment
+        uses: actions/deploy-pages@v4
